@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="ht">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Football Viral Bot</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body { background-color: #0f172a; color: white; }
+        .script-card { background: #1e293b; border-radius: 15px; border: 1px solid #334155; margin-bottom: 20px; overflow: hidden; }
+    </style>
+</head>
+<body class="p-4">
+    <h1 class="text-2xl font-bold text-center text-blue-400 mb-6">⚽ My Football News</h1>
+    
+    <div id="loading" class="text-center text-gray-500 italic">Ap chèche nouvèl...</div>
+    <div id="content"></div>
+
+    <script>
+        async function loadNews() {
+            try {
+                const response = await fetch('/history?limit=10');
+                if (!response.ok) throw new Error("Sèvè a pa reponn byen");
+                
+                const data = await response.json();
+                const container = document.getElementById('content');
+                document.getElementById('loading').style.display = 'none';
+
+                if (!data.results || data.results.length === 0) {
+                    container.innerHTML = "<p class='text-center text-yellow-500'>Database la vid. Rete tann 30 segonn, robot la ap travay...</p>";
+                    return;
+                }
+
+                container.innerHTML = ''; 
+                data.results.forEach(item => {
+                    const card = document.createElement('div');
+                    card.className = 'script-card';
+                    card.innerHTML = `
+                        ${item.image_url ? `<img src="${item.image_url}" class="w-full h-48 object-cover">` : ''}
+                        <div class="p-4">
+                            <h2 class="text-lg font-bold mb-2 text-blue-300">${item.title}</h2>
+                            <div class="bg-black/30 p-3 rounded text-sm mb-4 whitespace-pre-wrap">${item.scripts_multilingue}</div>
+                            <button onclick="copyText(this)" data-text="${encodeURIComponent(item.scripts_multilingue)}" 
+                                    class="w-full bg-green-600 p-2 rounded font-bold">Kopye Script</button>
+                        </div>
+                    `;
+                    container.appendChild(card);
+                });
+            } catch (err) {
+                document.getElementById('loading').innerText = "Erè: " + err.message;
+            }
+        }
+
+        function copyText(btn) {
+            const text = decodeURIComponent(btn.getAttribute('data-text'));
+            navigator.clipboard.writeText(text);
+            btn.innerText = "Kopye ✅";
+            setTimeout(() => btn.innerText = "Kopye Script", 2000);
+        }
+
+        loadNews();
+        setInterval(loadNews, 30000); // Tcheke chak 30 segonn
+    </script>
+</body>
+</html>

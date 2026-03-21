@@ -1,0 +1,7 @@
+fastapi
+uvicorn
+requests
+apscheduler
+aiofiles
+jinja2
+python-multipart
