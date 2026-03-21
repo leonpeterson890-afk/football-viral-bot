@@ -7,21 +7,11 @@ from fastapi.responses import FileResponse
 from fastapi.middleware.cors import CORSMiddleware
 from apscheduler.schedulers.background import BackgroundScheduler
 
-# Enpòtasyon modil yo
+# Enpòtasyon modil ou yo
 from news_fetcher import get_football_news
 from ai_generator import generate_viral_script
 
 app = FastAPI(title="Football Viral Bot Pro Max")
-
-# --- KONFIGIRASYON WHATSAPP (Ranplase ak pa w si w vle notifikasyon) ---
-WHATSAPP_PHONE = "509XXXXXXXX"  # Mete nimewo w
-WHATSAPP_API_KEY = "XXXXXX"      # Mete API Key CallMeBot la
-
-def voye_whatsapp(mesaj):
-    if WHATSAPP_API_KEY != "XXXXXX":
-        url = f"https://api.callmebot.com/whatsapp.php?phone={WHATSAPP_PHONE}&text={mesaj}&apikey={WHATSAPP_API_KEY}"
-        try: requests.get(url)
-        except: print("Erè WhatsApp")
 
 # 1. SEKIRITE (CORS)
 app.add_middleware(
@@ -69,21 +59,16 @@ def auto_fetch_job():
     try:
         articles = get_football_news() 
         if articles and isinstance(articles, list):
-            # Nou pran 3 premye nouvèl yo pou n pa depase limit AI a
+            # Nou trete 3 nouvèl sèlman pou evite "Time Out" sou Render
             for art in articles[:3]:
-                context = f"Tit: {art['title']}\nDeskripsyon: {art['description']}"
+                context = f"Tit: {art.get('title')}\nDeskripsyon: {art.get('description')}"
                 script = generate_viral_script(context)
-                
-                save_to_db(art['title'], art['source']['name'], art['urlToImage'], script)
-                
-                # Voye yon bip sou WhatsApp pou chak nouvèl
-                voye_whatsapp(f"⚽ *Nouvèl Foutbòl:* {art['title']}")
-                
+                save_to_db(art.get('title'), art.get('source', {}).get('name'), art.get('urlToImage'), script)
             print("✅ Nouvèl otomatik sove!")
     except Exception as e:
         print(f"Erè nan Job: {e}")
 
-# --- ROUTE POU RECHÈCH ---
+# --- ROUTE POU RECHÈCH (Sa bouton Fresh News la itilize) ---
 @app.get("/search")
 async def search_news(q: str = Query(...)):
     print(f"🔎 Rechèch espesifik sou: {q}")
@@ -93,34 +78,27 @@ async def search_news(q: str = Query(...)):
         return {"count": 0, "results": []}
 
     results = []
-    for art in articles[:2]: # Nou trete sèlman 2 pou l ka rapid
+    for art in articles[:3]: 
         try:
-            context = f"Tit: {art['title']}\nDeskripsyon: {art['description']}"
+            context = f"Tit: {art.get('title')}\nDeskripsyon: {art.get('description')}"
             script = generate_viral_script(context)
-            save_to_db(art['title'], art['source']['name'], art['urlToImage'], script)
+            save_to_db(art.get('title'), art.get('source', {}).get('name', 'News'), art.get('urlToImage'), script)
             results.append({
-                "title": art['title'],
-                "image_url": art['urlToImage'],
+                "title": art.get('title'),
+                "image_url": art.get('urlToImage'),
                 "scripts_multilingue": script
             })
         except: continue
         
     return {"count": len(results), "results": results}
 
-# Scheduler la
-scheduler = BackgroundScheduler()
-scheduler.add_job(auto_fetch_job, 'interval', minutes=30)
-scheduler.start()
-
-@app.on_event("startup")
-def startup_event():
-    init_db()
-    # auto_fetch_job() # Nou ka kòmante sa pou Render pa "crash" lè l fenk limen
-
-# 4. ROUTES
+# 4. ROUTES POU PAJ YO
 @app.get("/gui")
 async def get_ui():
-    return FileResponse("index.html")
+    # Verifikasyon si fichye a la tout bon vre pou evite "Not Found"
+    if os.path.exists("index.html"):
+        return FileResponse("index.html")
+    return {"error": "Fichye index.html la manke nan folder a!", "files_found": os.listdir(".")}
 
 @app.get("/history")
 async def get_history(limit: int = 15):
@@ -137,4 +115,17 @@ async def get_history(limit: int = 15):
 
 @app.get("/")
 async def root():
-    return {"status": "online", "gui_url": "/gui"}
+    return {
+        "status": "online", 
+        "message": "Robot a ap mache byen!",
+        "paj_la": "/gui"
+    }
+
+# Scheduler la
+scheduler = BackgroundScheduler()
+scheduler.add_job(auto_fetch_job, 'interval', minutes=30)
+scheduler.start()
+
+@app.on_event("startup")
+def startup_event():
+    init_db()
