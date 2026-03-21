@@ -3,63 +3,114 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Football Viral Bot</title>
+    <title>Football Viral Bot Pro</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
-        body { background-color: #0f172a; color: white; }
-        .script-card { background: #1e293b; border-radius: 15px; border: 1px solid #334155; margin-bottom: 20px; overflow: hidden; }
+        body { background-color: #0f172a; color: white; font-family: sans-serif; }
+        .script-card { background: #1e293b; border-radius: 15px; border: 1px solid #334155; margin-bottom: 20px; overflow: hidden; transition: 0.3s; }
+        .script-card:hover { border-color: #3b82f6; }
+        .loading-spinner { border: 4px solid rgba(255, 255, 255, 0.1); border-left-color: #3b82f6; border-radius: 50%; width: 30px; height: 30px; animation: spin 1s linear infinite; display: inline-block; }
+        @keyframes spin { to { transform: rotate(360deg); } }
     </style>
 </head>
-<body class="p-4">
-    <h1 class="text-2xl font-bold text-center text-blue-400 mb-6">⚽ My Football News</h1>
+<body class="p-4 max-w-2xl mx-auto">
+    <header class="text-center mb-8">
+        <h1 class="text-3xl font-bold text-blue-400 mb-2">⚽ My Football News</h1>
+        <p class="text-gray-400 text-sm">Scripts viral pou TikTok/Reels sou 17 gwo klèb Ewòp</p>
+    </header>
+
+    <div class="flex justify-center mb-8">
+        <button onclick="fetchFreshNews()" id="refreshBtn" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-6 rounded-full shadow-lg flex items-center gap-2 transition">
+            <span>🔄 Chèche Nouvèl Fre</span>
+        </button>
+    </div>
     
-    <div id="loading" class="text-center text-gray-500 italic">Ap chèche nouvèl...</div>
+    <div id="loading" class="hidden text-center text-blue-400 font-bold mb-4">
+        <div class="loading-spinner mb-2"></div>
+        <p>Robot a ap travay sou AI a, tann yon ti moman...</p>
+    </div>
+
     <div id="content"></div>
 
     <script>
-        async function loadNews() {
+        // Fonksyon pou chèche nan istwa a (lè paj la louvri)
+        async function loadHistory() {
             try {
                 const response = await fetch('/history?limit=10');
-                if (!response.ok) throw new Error("Sèvè a pa reponn byen");
-                
                 const data = await response.json();
-                const container = document.getElementById('content');
-                document.getElementById('loading').style.display = 'none';
-
-                if (!data.results || data.results.length === 0) {
-                    container.innerHTML = "<p class='text-center text-yellow-500'>Database la vid. Rete tann 30 segonn, robot la ap travay...</p>";
-                    return;
-                }
-
-                container.innerHTML = ''; 
-                data.results.forEach(item => {
-                    const card = document.createElement('div');
-                    card.className = 'script-card';
-                    card.innerHTML = `
-                        ${item.image_url ? `<img src="${item.image_url}" class="w-full h-48 object-cover">` : ''}
-                        <div class="p-4">
-                            <h2 class="text-lg font-bold mb-2 text-blue-300">${item.title}</h2>
-                            <div class="bg-black/30 p-3 rounded text-sm mb-4 whitespace-pre-wrap">${item.scripts_multilingue}</div>
-                            <button onclick="copyText(this)" data-text="${encodeURIComponent(item.scripts_multilingue)}" 
-                                    class="w-full bg-green-600 p-2 rounded font-bold">Kopye Script</button>
-                        </div>
-                    `;
-                    container.appendChild(card);
-                });
+                renderNews(data.results);
             } catch (err) {
-                document.getElementById('loading').innerText = "Erè: " + err.message;
+                console.error("Erè istwa:", err);
             }
         }
 
-        function copyText(btn) {
-            const text = decodeURIComponent(btn.getAttribute('data-text'));
-            navigator.clipboard.writeText(text);
-            btn.innerText = "Kopye ✅";
-            setTimeout(() => btn.innerText = "Kopye Script", 2000);
+        // Fonksyon pou FÒSE robot a chèche nouvèl fre
+        async function fetchFreshNews() {
+            const btn = document.getElementById('refreshBtn');
+            const loader = document.getElementById('loading');
+            
+            btn.disabled = true;
+            btn.classList.add('opacity-50');
+            loader.classList.remove('hidden');
+
+            try {
+                // Nou rele route search la pou fòse yon nouvo scan
+                const response = await fetch('/search?q=football');
+                const data = await response.json();
+                
+                if (data.results) {
+                    await loadHistory(); // Rafrechi lis la
+                }
+            } catch (err) {
+                alert("Erè: Sèvè a pran twòp tan. Eseye ankò nan 10 segonn.");
+            } finally {
+                btn.disabled = false;
+                btn.classList.remove('opacity-50');
+                loader.classList.add('hidden');
+            }
         }
 
-        loadNews();
-        setInterval(loadNews, 30000); // Tcheke chak 30 segonn
+        function renderNews(articles) {
+            const container = document.getElementById('content');
+            if (!articles || articles.length === 0) {
+                container.innerHTML = "<p class='text-center text-gray-500'>Pa gen anyen nan database la. Peze bouton anlè a!</p>";
+                return;
+            }
+
+            container.innerHTML = ''; 
+            articles.forEach(item => {
+                const card = document.createElement('div');
+                card.className = 'script-card';
+                card.innerHTML = `
+                    ${item.image_url ? `<img src="${item.image_url}" class="w-full h-52 object-cover">` : ''}
+                    <div class="p-5">
+                        <div class="text-xs text-blue-400 font-bold mb-1 uppercase">${item.source || 'Top News'}</div>
+                        <h2 class="text-xl font-bold mb-3 text-white">${item.title}</h2>
+                        <div class="bg-slate-900/50 p-4 rounded-lg text-sm mb-4 text-gray-300 border border-slate-700 whitespace-pre-wrap leading-relaxed">${item.scripts_multilingue}</div>
+                        <button onclick="copyText(this, \`${encodeURIComponent(item.scripts_multilingue)}\`)" 
+                                class="w-full bg-slate-700 hover:bg-green-600 p-3 rounded-xl font-bold transition flex justify-center items-center gap-2">
+                            <span>Kopye Script</span>
+                        </button>
+                    </div>
+                `;
+                container.appendChild(card);
+            });
+        }
+
+        function copyText(btn, encodedText) {
+            const text = decodeURIComponent(encodedText);
+            navigator.clipboard.writeText(text);
+            const originalText = btn.innerHTML;
+            btn.innerHTML = "✅ Kopye!";
+            btn.classList.add('bg-green-600');
+            setTimeout(() => {
+                btn.innerHTML = originalText;
+                btn.classList.remove('bg-green-600');
+            }, 2000);
+        }
+
+        // Chaje istwa a lè paj la limen
+        loadHistory();
     </script>
 </body>
 </html>
