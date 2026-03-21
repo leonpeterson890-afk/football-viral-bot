@@ -1,16 +1,27 @@
 import os
 import sqlite3
 import logging
+import requests
 from fastapi import FastAPI, Query
 from fastapi.responses import FileResponse
 from fastapi.middleware.cors import CORSMiddleware
 from apscheduler.schedulers.background import BackgroundScheduler
 
-# Enpòtasyon modil ou yo - NOU KORIJE NON YO ISIT LA
+# Enpòtasyon modil yo
 from news_fetcher import get_football_news
 from ai_generator import generate_viral_script
 
 app = FastAPI(title="Football Viral Bot Pro Max")
+
+# --- KONFIGIRASYON WHATSAPP (Ranplase ak pa w si w vle notifikasyon) ---
+WHATSAPP_PHONE = "509XXXXXXXX"  # Mete nimewo w
+WHATSAPP_API_KEY = "XXXXXX"      # Mete API Key CallMeBot la
+
+def voye_whatsapp(mesaj):
+    if WHATSAPP_API_KEY != "XXXXXX":
+        url = f"https://api.callmebot.com/whatsapp.php?phone={WHATSAPP_PHONE}&text={mesaj}&apikey={WHATSAPP_API_KEY}"
+        try: requests.get(url)
+        except: print("Erè WhatsApp")
 
 # 1. SEKIRITE (CORS)
 app.add_middleware(
@@ -23,16 +34,6 @@ app.add_middleware(
 # 2. DATABASE
 def init_db():
     db_path = 'football.db'
-    if os.path.exists(db_path):
-        try:
-            conn = sqlite3.connect(db_path)
-            conn.execute("SELECT name FROM sqlite_master WHERE type='table';")
-            conn.close()
-        except sqlite3.DatabaseError:
-            print("⚠️ Vye database la gate, m ap efasé l...")
-            try: os.remove(db_path)
-            except: pass
-
     try:
         conn = sqlite3.connect(db_path)
         cursor = conn.cursor()
@@ -50,14 +51,14 @@ def init_db():
         conn.close()
         print("✅ DATABASE PARE!")
     except Exception as e:
-        print(f"❌ Erè Grav DB: {e}")
+        print(f"❌ Erè DB: {e}")
 
 def save_to_db(title, source, img, scripts):
     try:
         conn = sqlite3.connect('football.db')
         cursor = conn.cursor()
         cursor.execute("INSERT OR IGNORE INTO news (title, source, image_url, scripts_multilingue) VALUES (?, ?, ?, ?)",
-                       (title, source, img, scripts))
+                       (title, str(source), img, scripts))
         conn.commit()
         conn.close()
     except: pass
@@ -66,12 +67,18 @@ def save_to_db(title, source, img, scripts):
 def auto_fetch_job():
     print("🔄 Robot ap chèche nouvèl pou klèb ou yo...")
     try:
-        # Sèvi ak nouvo fonksyon get_football_news la
-        all_news_text = get_football_news() 
-        if all_news_text:
-            # Nou voye tout tèks la bay AI a pou l fè yon gwo script
-            script = generate_viral_script(all_news_text)
-            save_to_db("Nouvèl Cho Ewòp", "Multiple Sources", None, script)
+        articles = get_football_news() 
+        if articles and isinstance(articles, list):
+            # Nou pran 3 premye nouvèl yo pou n pa depase limit AI a
+            for art in articles[:3]:
+                context = f"Tit: {art['title']}\nDeskripsyon: {art['description']}"
+                script = generate_viral_script(context)
+                
+                save_to_db(art['title'], art['source']['name'], art['urlToImage'], script)
+                
+                # Voye yon bip sou WhatsApp pou chak nouvèl
+                voye_whatsapp(f"⚽ *Nouvèl Foutbòl:* {art['title']}")
+                
             print("✅ Nouvèl otomatik sove!")
     except Exception as e:
         print(f"Erè nan Job: {e}")
@@ -80,24 +87,25 @@ def auto_fetch_job():
 @app.get("/search")
 async def search_news(q: str = Query(...)):
     print(f"🔎 Rechèch espesifik sou: {q}")
-    # Nou rele get_football_news ak rechèch itilizatè a
-    news_text = get_football_news(query_user=q)
+    articles = get_football_news(query_user=q)
     
-    if not news_text:
+    if not articles or not isinstance(articles, list):
         return {"count": 0, "results": []}
 
-    try:
-        script = generate_viral_script(news_text)
-        save_to_db(f"Rechèch: {q}", "NewsAPI", None, script)
-        return {
-            "count": 1, 
-            "results": [{
-                "title": f"Dènye enfòmasyon sou {q}",
+    results = []
+    for art in articles[:2]: # Nou trete sèlman 2 pou l ka rapid
+        try:
+            context = f"Tit: {art['title']}\nDeskripsyon: {art['description']}"
+            script = generate_viral_script(context)
+            save_to_db(art['title'], art['source']['name'], art['urlToImage'], script)
+            results.append({
+                "title": art['title'],
+                "image_url": art['urlToImage'],
                 "scripts_multilingue": script
-            }]
-        }
-    except Exception as e:
-        return {"error": str(e)}
+            })
+        except: continue
+        
+    return {"count": len(results), "results": results}
 
 # Scheduler la
 scheduler = BackgroundScheduler()
@@ -107,7 +115,7 @@ scheduler.start()
 @app.on_event("startup")
 def startup_event():
     init_db()
-    auto_fetch_job()
+    # auto_fetch_job() # Nou ka kòmante sa pou Render pa "crash" lè l fenk limen
 
 # 4. ROUTES
 @app.get("/gui")
