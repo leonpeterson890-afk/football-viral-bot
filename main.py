@@ -6,8 +6,8 @@ from fastapi.responses import FileResponse
 from fastapi.middleware.cors import CORSMiddleware
 from apscheduler.schedulers.background import BackgroundScheduler
 
-# Enpòtasyon modil ou yo
-from news_fetcher import fetch_latest_football_news
+# Enpòtasyon modil ou yo - NOU KORIJE NON YO ISIT LA
+from news_fetcher import get_football_news
 from ai_generator import generate_viral_script
 
 app = FastAPI(title="Football Viral Bot Pro Max")
@@ -64,38 +64,40 @@ def save_to_db(title, source, img, scripts):
 
 # 3. TRAVAY OTOMATIK
 def auto_fetch_job():
-    print("🔄 Robot ap chèche nouvèl jeneral...")
+    print("🔄 Robot ap chèche nouvèl pou klèb ou yo...")
     try:
-        articles = fetch_latest_football_news() # Sèvi ak lis Messi/Ronaldo a
-        if articles:
-            for article in articles[:3]:
-                script = generate_viral_script(article)
-                save_to_db(article.get("title"), article.get("source", {}).get("name"), article.get("urlToImage"), script)
+        # Sèvi ak nouvo fonksyon get_football_news la
+        all_news_text = get_football_news() 
+        if all_news_text:
+            # Nou voye tout tèks la bay AI a pou l fè yon gwo script
+            script = generate_viral_script(all_news_text)
+            save_to_db("Nouvèl Cho Ewòp", "Multiple Sources", None, script)
             print("✅ Nouvèl otomatik sove!")
     except Exception as e:
         print(f"Erè nan Job: {e}")
 
-# --- NOUVO: ROUTE POU RECHÈCH ---
+# --- ROUTE POU RECHÈCH ---
 @app.get("/search")
 async def search_news(q: str = Query(...)):
-    """Route sa a pèmèt ou tape nan navigatè a: /search?q=Mbappe"""
     print(f"🔎 Rechèch espesifik sou: {q}")
-    articles = fetch_latest_football_news(query_user=q)
-    results = []
+    # Nou rele get_football_news ak rechèch itilizatè a
+    news_text = get_football_news(query_user=q)
     
-    # Nou pran 2 nouvèl sou sa w mande a epi AI ap travay sou yo rapid
-    for a in articles[:2]:
-        try:
-            script = generate_viral_script(a)
-            # Nou sove l tou nan history a pou w ka jwenn li nan GUI a pita
-            save_to_db(a.get("title"), a.get("source", {}).get("name"), a.get("urlToImage"), script)
-            results.append({
-                "title": a.get("title"),
-                "image_url": a.get("urlToImage"),
+    if not news_text:
+        return {"count": 0, "results": []}
+
+    try:
+        script = generate_viral_script(news_text)
+        save_to_db(f"Rechèch: {q}", "NewsAPI", None, script)
+        return {
+            "count": 1, 
+            "results": [{
+                "title": f"Dènye enfòmasyon sou {q}",
                 "scripts_multilingue": script
-            })
-        except: continue
-    return {"count": len(results), "results": results}
+            }]
+        }
+    except Exception as e:
+        return {"error": str(e)}
 
 # Scheduler la
 scheduler = BackgroundScheduler()
