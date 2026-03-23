@@ -7,9 +7,12 @@ from fastapi.responses import FileResponse
 from fastapi.middleware.cors import CORSMiddleware
 from apscheduler.schedulers.background import BackgroundScheduler
 
-# Enpòtasyon modil ou yo
-from news_fetcher import get_football_news
-from ai_generator import generate_viral_script
+# Enpòtasyon modil ou yo (Asire w yo nan menm folder a)
+try:
+    from news_fetcher import get_football_news
+    from ai_generator import generate_viral_script
+except ImportError as e:
+    print(f"❌ ERÈ ENPÒTASYON: Manke yon fichye .py! {e}")
 
 app = FastAPI(title="Football Viral Bot Pro Max")
 
@@ -21,7 +24,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# 2. DATABASE
+# 2. DATABASE (Amelyore pou montre erè)
 def init_db():
     db_path = 'football.db'
     try:
@@ -39,9 +42,9 @@ def init_db():
         ''')
         conn.commit()
         conn.close()
-        print("✅ DATABASE PARE!")
+        print("✅ DATABASE PARE E OPERASYONÈL!")
     except Exception as e:
-        print(f"❌ Erè DB: {e}")
+        print(f"❌ ERÈ KRITIK DB: {e}")
 
 def save_to_db(title, source, img, scripts):
     try:
@@ -49,56 +52,76 @@ def save_to_db(title, source, img, scripts):
         cursor = conn.cursor()
         cursor.execute("INSERT OR IGNORE INTO news (title, source, image_url, scripts_multilingue) VALUES (?, ?, ?, ?)",
                        (title, str(source), img, scripts))
+        if cursor.rowcount > 0:
+            print(f"💾 Sove nan DB: {title[:30]}...")
+        else:
+            print(f"ℹ️ Tit sa egziste deja, mwen pa double l: {title[:30]}...")
         conn.commit()
         conn.close()
-    except: pass
+    except Exception as e:
+        print(f"❌ ERÈ NAN SOVE DB: {e}")
 
-# 3. TRAVAY OTOMATIK
+# 3. TRAVAY OTOMATIK (Job)
 def auto_fetch_job():
-    print("🔄 Robot ap chèche nouvèl pou klèb ou yo...")
+    print("🔄 [JOB] Robot ap chèche nouvèl otomatik...")
     try:
         articles = get_football_news() 
         if articles and isinstance(articles, list):
-            # Nou trete 3 nouvèl sèlman pou evite "Time Out" sou Render
+            print(f"🔎 [JOB] Jwenn {len(articles)} nouvèl fre.")
             for art in articles[:3]:
                 context = f"Tit: {art.get('title')}\nDeskripsyon: {art.get('description')}"
                 script = generate_viral_script(context)
                 save_to_db(art.get('title'), art.get('source', {}).get('name'), art.get('urlToImage'), script)
-            print("✅ Nouvèl otomatik sove!")
+        else:
+            print("⚠️ [JOB] API a pa tounen okenn nouvèl.")
     except Exception as e:
-        print(f"Erè nan Job: {e}")
+        print(f"❌ ERÈ NAN JOB OTOMATIK: {e}")
 
 # --- ROUTE POU RECHÈCH (Sa bouton Fresh News la itilize) ---
 @app.get("/search")
 async def search_news(q: str = Query(...)):
-    print(f"🔎 Rechèch espesifik sou: {q}")
-    articles = get_football_news(query_user=q)
-    
-    if not articles or not isinstance(articles, list):
-        return {"count": 0, "results": []}
-
-    results = []
-    for art in articles[:3]: 
-        try:
-            context = f"Tit: {art.get('title')}\nDeskripsyon: {art.get('description')}"
-            script = generate_viral_script(context)
-            save_to_db(art.get('title'), art.get('source', {}).get('name', 'News'), art.get('urlToImage'), script)
-            results.append({
-                "title": art.get('title'),
-                "image_url": art.get('urlToImage'),
-                "scripts_multilingue": script
-            })
-        except: continue
+    print(f"🔎 RECHÈCH MANYÈL: {q}")
+    try:
+        articles = get_football_news(query_user=q)
         
-    return {"count": len(results), "results": results}
+        if not articles or not isinstance(articles, list):
+            print("⚠️ API a pa bay anyen pou rechèch sa.")
+            return {"count": 0, "results": [], "message": "Pa gen nouvèl jwenn"}
 
-# 4. ROUTES POU PAJ YO
+        results = []
+        for art in articles[:3]: 
+            try:
+                title = art.get('title')
+                desc = art.get('description', '')
+                img = art.get('urlToImage')
+                source_name = art.get('source', {}).get('name', 'News')
+
+                print(f"🤖 AI ap trete: {title[:40]}...")
+                script = generate_viral_script(f"Tit: {title}\nDeskripsyon: {desc}")
+                
+                save_to_db(title, source_name, img, script)
+                
+                results.append({
+                    "title": title,
+                    "image_url": img,
+                    "scripts_multilingue": script,
+                    "source": source_name
+                })
+            except Exception as ai_err:
+                print(f"❌ Erè nan trete yon atik: {ai_err}")
+                continue
+        
+        return {"count": len(results), "results": results}
+    except Exception as e:
+        print(f"❌ Erè jeneral nan /search: {e}")
+        return {"count": 0, "results": [], "error": str(e)}
+
+# 4. ROUTES POU UI
 @app.get("/gui")
 async def get_ui():
-    # Verifikasyon si fichye a la tout bon vre pou evite "Not Found"
     if os.path.exists("index.html"):
         return FileResponse("index.html")
-    return {"error": "Fichye index.html la manke nan folder a!", "files_found": os.listdir(".")}
+    return {"error": "index.html manke!", "files": os.listdir(".")}
 
 @app.get("/history")
 async def get_history(limit: int = 15):
@@ -111,21 +134,20 @@ async def get_history(limit: int = 15):
         conn.close()
         return {"results": [dict(row) for row in rows]}
     except Exception as e:
+        print(f"❌ Erè nan chaje istwa: {e}")
         return {"results": [], "error": str(e)}
 
 @app.get("/")
 async def root():
-    return {
-        "status": "online", 
-        "message": "Robot a ap mache byen!",
-        "paj_la": "/gui"
-    }
+    return {"status": "online", "gui": "/gui"}
 
-# Scheduler la
-scheduler = BackgroundScheduler()
+# SCHEDULER (Ranje pou Render pa bloke l)
+scheduler = BackgroundScheduler(daemon=True)
 scheduler.add_job(auto_fetch_job, 'interval', minutes=30)
 scheduler.start()
 
 @app.on_event("startup")
-def startup_event():
+async def startup_event():
     init_db()
+    # Opsyonèl: Ou ka de-kòmante liy anba a pou l chèche nouvèl menm kote l limen an
+    # auto_fetch_job()
