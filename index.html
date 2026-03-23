@@ -21,7 +21,7 @@
 
     <div class="flex justify-center mb-8">
         <button onclick="fetchFreshNews()" id="refreshBtn" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-6 rounded-full shadow-lg flex items-center gap-2 transition">
-            <span>🔄 Chèche Nouvèl Fre</span>
+            <span id="btnText">🔄 Chèche Nouvèl Fre</span>
         </button>
     </div>
     
@@ -33,36 +33,51 @@
     <div id="content"></div>
 
     <script>
-        // Fonksyon pou chèche nan istwa a (lè paj la louvri)
+        // 1. Fonksyon pou chaje istwa a (lè paj la louvri)
         async function loadHistory() {
+            const container = document.getElementById('content');
+            console.log("LOG: M ap chèche istwa nan database...");
+            
             try {
                 const response = await fetch('/history?limit=10');
+                if (!response.ok) throw new Error(`Erè HTTP: ${response.status}`);
+                
                 const data = await response.json();
+                console.log("LOG: Done resevwa:", data);
                 renderNews(data.results);
             } catch (err) {
-                console.error("Erè istwa:", err);
+                console.error("ERÈ ISTWA:", err);
+                container.innerHTML = `<p class='text-center text-red-400'>Erè koneksyon ak sèvè a. Verifye si Render "Live".</p>`;
             }
         }
 
-        // Fonksyon pou FÒSE robot a chèche nouvèl fre
+        // 2. Fonksyon pou FÒSE robot a chèche nouvèl fre
         async function fetchFreshNews() {
             const btn = document.getElementById('refreshBtn');
             const loader = document.getElementById('loading');
+            
+            console.log("LOG: Bouton peze, m ap rele /search...");
             
             btn.disabled = true;
             btn.classList.add('opacity-50');
             loader.classList.remove('hidden');
 
             try {
-                // Nou rele route search la pou fòse yon nouvo scan
+                // Atansyon: Rechèch sa ka pran jiska 30 segonn si AI a dousman
                 const response = await fetch('/search?q=football');
                 const data = await response.json();
                 
-                if (data.results) {
-                    await loadHistory(); // Rafrechi lis la
+                console.log("LOG: Rezilta rechèch:", data);
+                
+                if (data.count > 0) {
+                    console.log("LOG: Nouvo nouvèl jwenn, m ap rafrechi lis la...");
+                    await loadHistory(); 
+                } else {
+                    alert("Pa gen nouvo nouvèl pou kounye a. Eseye ankò pita.");
                 }
             } catch (err) {
-                alert("Erè: Sèvè a pran twòp tan. Eseye ankò nan 10 segonn.");
+                console.error("ERÈ RECHÈCH:", err);
+                alert("Sèvè a pran twòp tan (Timeout). Men, verifye si nouvèl yo pa parèt kanmenm nan 1 minit.");
             } finally {
                 btn.disabled = false;
                 btn.classList.remove('opacity-50');
@@ -70,10 +85,16 @@
             }
         }
 
+        // 3. Fonksyon pou montre nouvèl yo sou ekran an
         function renderNews(articles) {
             const container = document.getElementById('content');
+            
             if (!articles || articles.length === 0) {
-                container.innerHTML = "<p class='text-center text-gray-500'>Pa gen anyen nan database la. Peze bouton anlè a!</p>";
+                container.innerHTML = `
+                    <div class="text-center p-10 border-2 border-dashed border-slate-700 rounded-2xl">
+                        <p class='text-gray-500 mb-2'>Database la vid kounye a.</p>
+                        <p class='text-blue-400 text-sm font-bold'>Peze bouton "Chèche Nouvèl Fre" a pou kòmanse.</p>
+                    </div>`;
                 return;
             }
 
@@ -81,14 +102,25 @@
             articles.forEach(item => {
                 const card = document.createElement('div');
                 card.className = 'script-card';
+                
+                // Si pa gen imaj, nou pa montre baliz <img> la
+                const imgTag = item.image_url ? `<img src="${item.image_url}" class="w-full h-52 object-cover" onerror="this.style.display='none'">` : '';
+                
                 card.innerHTML = `
-                    ${item.image_url ? `<img src="${item.image_url}" class="w-full h-52 object-cover">` : ''}
+                    ${imgTag}
                     <div class="p-5">
-                        <div class="text-xs text-blue-400 font-bold mb-1 uppercase">${item.source || 'Top News'}</div>
-                        <h2 class="text-xl font-bold mb-3 text-white">${item.title}</h2>
-                        <div class="bg-slate-900/50 p-4 rounded-lg text-sm mb-4 text-gray-300 border border-slate-700 whitespace-pre-wrap leading-relaxed">${item.scripts_multilingue}</div>
+                        <div class="flex justify-between items-start mb-2">
+                            <span class="text-[10px] bg-blue-900/50 text-blue-300 px-2 py-1 rounded uppercase font-bold">
+                                ${item.source || 'Foutbòl'}
+                            </span>
+                            <span class="text-[10px] text-gray-500">${new Date(item.created_at || Date.now()).toLocaleDateString()}</span>
+                        </div>
+                        <h2 class="text-xl font-bold mb-3 text-white leading-tight">${item.title}</h2>
+                        <div class="bg-slate-900/80 p-4 rounded-lg text-sm mb-4 text-gray-300 border border-slate-700 whitespace-pre-wrap leading-relaxed italic">
+                            "${item.scripts_multilingue || 'Script an preparasyon...'}"
+                        </div>
                         <button onclick="copyText(this, \`${encodeURIComponent(item.scripts_multilingue)}\`)" 
-                                class="w-full bg-slate-700 hover:bg-green-600 p-3 rounded-xl font-bold transition flex justify-center items-center gap-2">
+                                class="w-full bg-slate-800 hover:bg-blue-600 p-3 rounded-xl font-bold transition flex justify-center items-center gap-2 border border-slate-600">
                             <span>Kopye Script</span>
                         </button>
                     </div>
@@ -97,20 +129,22 @@
             });
         }
 
+        // 4. Fonksyon pou kopye tèks
         function copyText(btn, encodedText) {
             const text = decodeURIComponent(encodedText);
-            navigator.clipboard.writeText(text);
-            const originalText = btn.innerHTML;
-            btn.innerHTML = "✅ Kopye!";
-            btn.classList.add('bg-green-600');
-            setTimeout(() => {
-                btn.innerHTML = originalText;
-                btn.classList.remove('bg-green-600');
-            }, 2000);
+            navigator.clipboard.writeText(text).then(() => {
+                const originalText = btn.innerHTML;
+                btn.innerHTML = "✅ Kopye nan clipboard!";
+                btn.classList.add('bg-green-600', 'border-green-500');
+                setTimeout(() => {
+                    btn.innerHTML = originalText;
+                    btn.classList.remove('bg-green-600', 'border-green-500');
+                }, 2000);
+            });
         }
 
-        // Chaje istwa a lè paj la limen
-        loadHistory();
+        // Chaje istwa a otomatikman lè paj la louvri
+        window.onload = loadHistory;
     </script>
 </body>
 </html>
